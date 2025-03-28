@@ -16,7 +16,11 @@ func (m *MWChain) Add(middlewares ...Middleware) {
 	m.middlewares = append(m.middlewares, middlewares...)
 }
 
-func (m *MWChain) Wrap(h http.HandlerFunc) http.HandlerFunc {
+func (m *MWChain) Wrap(h http.HandlerFunc, middlewares ...Middleware) http.HandlerFunc {
+	//first wrap with the handler-specific middleware
+	h = wrapHandlerFunc(h, middlewares)
+
+	//then wrap with the chain middleware
 	return wrapHandlerFunc(h, m.middlewares)
 }
 

@@ -11,154 +11,101 @@ import (
 )
 
 func Test_MWChain(t *testing.T) {
+	tests := []struct {
+		name                 string
+		initialMiddleware    []mwchain.Middleware
+		additionalMiddleware []mwchain.Middleware
+		handlerMiddleware    []mwchain.Middleware
+		expectedRequest      string
+		expectedResponse     string
+	}{
+		{
+			name:                 "new empty chain",
+			initialMiddleware:    nil,
+			additionalMiddleware: nil,
+			expectedRequest:      "",
+			expectedResponse:     "",
+		},
+		{
+			name:                 "new single middleware",
+			initialMiddleware:    []mwchain.Middleware{mw(1)},
+			additionalMiddleware: nil,
+			expectedRequest:      "1",
+			expectedResponse:     "1",
+		},
+		{
+			name:                 "new multiple middlewares",
+			initialMiddleware:    []mwchain.Middleware{mw(1), mw(2)},
+			additionalMiddleware: nil,
+			expectedRequest:      "12",
+			expectedResponse:     "21",
+		},
+		{
+			name:                 "empty new, add single",
+			initialMiddleware:    nil,
+			additionalMiddleware: []mwchain.Middleware{mw(1)},
+			expectedRequest:      "1",
+			expectedResponse:     "1",
+		},
+		{
+			name:                 "empty new, add multiple",
+			initialMiddleware:    nil,
+			additionalMiddleware: []mwchain.Middleware{mw(1), mw(2), mw(3)},
+			expectedRequest:      "123",
+			expectedResponse:     "321",
+		},
+		{
+			name:                 "single new, add single",
+			initialMiddleware:    []mwchain.Middleware{mw(1)},
+			additionalMiddleware: []mwchain.Middleware{mw(2)},
+			expectedRequest:      "12",
+			expectedResponse:     "21",
+		},
+		{
+			name:                 "single new, add multiple",
+			initialMiddleware:    []mwchain.Middleware{mw(1)},
+			additionalMiddleware: []mwchain.Middleware{mw(2), mw(3), mw(4)},
+			expectedRequest:      "1234",
+			expectedResponse:     "4321",
+		},
+		{
+			name:                 "multiple new, add multiple",
+			initialMiddleware:    []mwchain.Middleware{mw(1), mw(2), mw(3)},
+			additionalMiddleware: []mwchain.Middleware{mw(4), mw(5), mw(6)},
+			expectedRequest:      "123456",
+			expectedResponse:     "654321",
+		},
+		{
+			name:                 "multiple new, add multiple, multiple handler",
+			initialMiddleware:    []mwchain.Middleware{mw(1), mw(2), mw(3)},
+			additionalMiddleware: []mwchain.Middleware{mw(4), mw(5), mw(6)},
+			handlerMiddleware:    []mwchain.Middleware{mw(7), mw(8), mw(9)},
+			expectedRequest:      "123456789",
+			expectedResponse:     "987654321",
+		},
+	}
 
-	// mw1 := func(next http.HandlerFunc) http.HandlerFunc {
-	// 	return func(w http.ResponseWriter, r *http.Request) {
-	// 		// Do something before the next handler
-	// 		// Call the next handler
-	// 		next(w, r)
-	// 		// Do something after the next handler
-	// 	}
-	// }
-	// mw2 := func(next http.HandlerFunc) http.HandlerFunc {
-	// 	return func(w http.ResponseWriter, r *http.Request) {
-	// 		// Do something before the next handler
-	// 		// Call the next handler
-	// 		next(w, r)
-	// 		// Do something after the next handler
-	// 	}
-	// }
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 
-	t.Run("new empty chain", func(t *testing.T) {
-		chain := mwchain.NewChain()
-		assert.NotNil(t, chain)
+			// Create a new middleware chain with the initial middlewares
+			chain := mwchain.NewChain(tt.initialMiddleware...)
 
-		h := &testHandler{}
-		chain.Wrap(h.ServeHTTP)
+			// Add additional middlewares to the chain
+			chain.Add(tt.additionalMiddleware...)
 
-		r, _ := http.NewRequest("GET", "http://example.com", nil)
-		w := httptest.NewRecorder()
+			h := &testHandler{}
+			sut := chain.Wrap(h.ServeHTTP, tt.handlerMiddleware...)
 
-		h.ServeHTTP(w, r)
+			r, _ := http.NewRequest("GET", "http://example.com", nil)
+			w := httptest.NewRecorder()
 
-		assert.Equal(t, "", w.Header().Get("X-Middleware-Number"))
-	})
+			sut.ServeHTTP(w, r)
 
-	t.Run("new single middleware", func(t *testing.T) {
-		chain := mwchain.NewChain(mw(1))
-
-		h := &testHandler{}
-		sut := chain.Wrap(h.ServeHTTP)
-
-		r, _ := http.NewRequest("GET", "http://example.com", nil)
-		w := httptest.NewRecorder()
-
-		sut.ServeHTTP(w, r)
-
-		assert.Equal(t, "1", h.requestHeader.Get("X-Middleware-Number"))
-		assert.Equal(t, "1", w.Header().Get("X-Middleware-Number"))
-	})
-
-	t.Run("new multiple middlewares", func(t *testing.T) {
-		chain := mwchain.NewChain(mw(1), mw(2))
-
-		h := &testHandler{}
-		sut := chain.Wrap(h.ServeHTTP)
-
-		r, _ := http.NewRequest("GET", "http://example.com", nil)
-		w := httptest.NewRecorder()
-
-		sut.ServeHTTP(w, r)
-
-		assert.Equal(t, "12", h.requestHeader.Get("X-Middleware-Number"))
-		assert.Equal(t, "21", w.Header().Get("X-Middleware-Number"))
-	})
-
-	t.Run("empty new, add single", func(t *testing.T) {
-		chain := mwchain.NewChain()
-
-		chain.Add(mw(1))
-
-		h := &testHandler{}
-		sut := chain.Wrap(h.ServeHTTP)
-
-		r, _ := http.NewRequest("GET", "http://example.com", nil)
-		w := httptest.NewRecorder()
-
-		sut.ServeHTTP(w, r)
-
-		assert.Equal(t, "1", h.requestHeader.Get("X-Middleware-Number"))
-		assert.Equal(t, "1", w.Header().Get("X-Middleware-Number"))
-	})
-
-	t.Run("empty new, add multiple", func(t *testing.T) {
-		chain := mwchain.NewChain()
-
-		chain.Add(mw(1), mw(2), mw(3))
-
-		h := &testHandler{}
-		sut := chain.Wrap(h.ServeHTTP)
-
-		r, _ := http.NewRequest("GET", "http://example.com", nil)
-		w := httptest.NewRecorder()
-
-		sut.ServeHTTP(w, r)
-
-		assert.Equal(t, "123", h.requestHeader.Get("X-Middleware-Number"))
-		assert.Equal(t, "321", w.Header().Get("X-Middleware-Number"))
-	})
-
-	t.Run("single new, add single", func(t *testing.T) {
-		chain := mwchain.NewChain(mw(1))
-
-		chain.Add(mw(2))
-
-		h := &testHandler{}
-		sut := chain.Wrap(h.ServeHTTP)
-
-		r, _ := http.NewRequest("GET", "http://example.com", nil)
-		w := httptest.NewRecorder()
-
-		sut.ServeHTTP(w, r)
-
-		assert.Equal(t, "12", h.requestHeader.Get("X-Middleware-Number"))
-		assert.Equal(t, "21", w.Header().Get("X-Middleware-Number"))
-	})
-
-	t.Run("single new, add multiple", func(t *testing.T) {
-		chain := mwchain.NewChain(mw(1))
-
-		chain.Add(mw(2), mw(3), mw(4))
-
-		h := &testHandler{}
-		sut := chain.Wrap(h.ServeHTTP)
-
-		r, _ := http.NewRequest("GET", "http://example.com", nil)
-		w := httptest.NewRecorder()
-
-		sut.ServeHTTP(w, r)
-
-		assert.Equal(t, "1234", h.requestHeader.Get("X-Middleware-Number"))
-		assert.Equal(t, "4321", w.Header().Get("X-Middleware-Number"))
-	})
-
-	t.Run("multiple new, add multiple", func(t *testing.T) {
-		chain := mwchain.NewChain(mw(1), mw(2), mw(3))
-
-		chain.Add(mw(4), mw(5), mw(6))
-		chain.Add(mw(7), mw(8), mw(9))
-
-		h := &testHandler{}
-		sut := chain.Wrap(h.ServeHTTP)
-
-		r, _ := http.NewRequest("GET", "http://example.com", nil)
-		w := httptest.NewRecorder()
-
-		sut.ServeHTTP(w, r)
-
-		assert.Equal(t, "123456789", h.requestHeader.Get("X-Middleware-Number"))
-		assert.Equal(t, "987654321", w.Header().Get("X-Middleware-Number"))
-	})
+			assert.Equal(t, tt.expectedRequest, h.requestHeader.Get("X-Middleware-Number"))
+			assert.Equal(t, tt.expectedResponse, w.Header().Get("X-Middleware-Number"))
+		})
+	}
 }
 
 func mw(number int) mwchain.Middleware {
